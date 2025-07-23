@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trilogy Solution - Sistema de Gestión</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Librería para procesar archivos de Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Librería para generar códigos QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .main-content { transition: margin-left 0.3s ease-in-out; }
+        .modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 40; }
+        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 50; max-height: 90vh; overflow-y: auto; }
+        .sidebar-item.active { background-color: #1e40af; color: white; border-left: 4px solid #60a5fa; }
+        [data-role-required] { display: none; }
+        .profile-picture-container { position: relative; cursor: pointer; }
+        .profile-picture-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); color: white; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; }
+        .profile-picture-container:hover .profile-picture-overlay { opacity: 1; }
+        
+        /* Responsive Table Styles */
+        @media (max-width: 768px) {
+            .responsive-table thead {
+                display: none;
+            }
+            .responsive-table tr {
+                display: block;
+                margin-bottom: 1rem;
+                border: 1px solid #ddd;
+                border-radius: 0.5rem;
+                padding: 1rem;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            }
+            .responsive-table td {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 0.5rem 0;
+                border-bottom: 1px solid #eee;
+            }
+             .responsive-table td:last-child {
+                border-bottom: none;
+            }
+            .responsive-table td::before {
+                content: attr(data-label);
+                font-weight: 600;
+                margin-right: 1rem;
+                color: #4a5568;
+            }
+            .sidebar { transform: translateX(-100%); position: fixed; z-index: 30; height: 100%; }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; }
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printable-invoice, #printable-invoice * { visibility: visible; }
+            #printable-invoice { position: absolute; left: 0; top: 0; width: 100%; }
+            .no-print { display: none; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="flex items-center justify-center h-screen bg-gray-200">
+        <div class="w-full max-w-md bg-white p-8 rounded-2xl shadow-xl m-4">
+            <div class="text-center mb-8">
+                <div class="flex items-center justify-center gap-4">
+                    <span id="main-software-name-login" class="text-2xl font-bold text-gray-600">Trilogy Solution</span>
+                    <span class="text-gray-300">|</span>
+                    <img id="login-logo" src="https://placehold.co/150x50/ffffff/1e40af?text=Innovatech" alt="Logo de la Empresa Cliente" class="h-10">
+                </div>
+                <h1 id="login-company-name" class="text-xl font-semibold text-blue-900 mt-2">Innovatech Panamá S.A.</h1>
+                <p class="text-gray-500 mt-2">Acceso exclusivo para colaboradores</p>
+            </div>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="email" class="block text-gray-700 text-sm font-bold mb-2">Correo Electrónico</label>
+                    <input type="email" id="email" class="shadow-sm appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-gray-700 text-sm font-bold mb-2">Contraseña</label>
+                    <input type="password" id="password" class="shadow-sm appearance-none border rounded-lg w-full py-3 px-4 text-gray-700 mb-3 leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div id="login-error" class="hidden text-red-500 text-sm text-center mb-4">Credenciales incorrectas. Inténtelo de nuevo.</div>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg focus:outline-none focus:shadow-outline w-full">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App Container (hidden by default) -->
+    <div id="app-container" class="hidden">
+        <!-- Sidebar -->
+        <nav id="sidebar" class="sidebar bg-blue-900 text-white w-64 h-screen fixed top-0 left-0 p-4 flex flex-col no-print">
+            <div>
+                <div class="pb-4 border-b border-blue-700">
+                    <div class="flex items-center">
+                        <img id="main-software-logo-sidebar" src="https://placehold.co/32x32/60a5fa/ffffff?text=TS" class="h-8 w-8 mr-3 rounded-md">
+                        <span id="main-software-name-sidebar" class="text-2xl font-bold">Trilogy Solution</span>
+                    </div>
+                    <div class="flex items-center mt-2 pl-2">
+                         <img id="sidebar-logo" src="https://placehold.co/24x24/ffffff/1e40af?text=I" class="h-6 w-6 mr-2 rounded-md">
+                         <span id="sidebar-company-name" class="text-lg font-medium text-blue-200">Innovatech</span>
+                    </div>
+                </div>
+                <ul class="mt-4 space-y-2">
+                    <li><a href="#dashboard" class="sidebar-item active flex items-center p-3 rounded-lg hover:bg-blue-800" data-role-required="administrador,vendedor,contador"><i class="fas fa-tachometer-alt w-6"></i><span class="ml-3">Dashboard</span></a></li>
+                    <li><a href="#inventario" class="sidebar-item flex items-center p-3 rounded-lg hover:bg-blue-800" data-role-required="administrador,vendedor"><i class="fas fa-boxes-stacked w-6"></i><span class="ml-3">Inventario</span></a></li>
+                    <li><a href="#facturacion" class="sidebar-item flex items-center p-3 rounded-lg hover:bg-blue-800" data-role-required="administrador,vendedor"><i class="fas fa-file-invoice w-6"></i><span class="ml-3">Facturación</span></a></li>
+                    <li><a href="#notas-credito" class="sidebar-item flex items-center p-3 rounded-lg hover:bg-blue-800" data-role-required="administrador,vendedor"><i class="fas fa-file-alt w-6"></i><span class="ml-3">Notas de Crédito</span></a></li>
+                    <li><a href="#pagos-reportes" class="sidebar-item flex items-center p-3 rounded-lg hover:bg-blue-800" data-role-required="administrador,contador"><i class="fas fa-university w-6"></i><span class="ml-3">Pagos y Reportes DGI</span></a></li>
+                </ul>
+            </div>
+            <div class="mt-auto">
+                <a href="#perfil" class="sidebar-item flex items-center p-3 rounded-lg hover:bg-blue-800 border-t border-blue-700" data-role-required="administrador,vendedor,contador"><i class="fas fa-user-cog w-6"></i><span class="ml-3">Mi Perfil</span></a>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main id="main-content" class="main-content md:ml-64 p-4 md:p-8">
+            <!-- Header -->
+            <header class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 no-print gap-4">
+                <div class="flex items-center gap-4">
+                    <button id="menu-toggle" class="md:hidden p-2 rounded-md bg-gray-200 text-gray-800"><i class="fas fa-bars"></i></button>
+                    <div>
+                        <h1 id="page-title" class="text-3xl font-bold text-gray-800">Dashboard</h1>
+                        <p id="header-branch-display" class="text-sm text-blue-600 font-bold"></p>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-4 self-end sm:self-center">
+                    <i class="fas fa-bell text-gray-500"></i>
+                    <div class="flex items-center space-x-2">
+                        <img id="header-profile-pic" src="https://placehold.co/40x40/60a5fa/ffffff?text=U" alt="Avatar de usuario" class="w-10 h-10 rounded-full object-cover">
+                        <div class="text-right">
+                            <p id="user-name-display" class="font-semibold text-gray-700">Usuario</p>
+                            <p id="user-role-display" class="text-sm text-gray-500">Rol</p>
+                        </div>
+                    </div>
+                    <button id="logout-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <div id="content">
+                 <section id="dashboard" class="page">
+                     <div class="mb-6 p-4 bg-gray-50 rounded-lg flex items-center gap-4">
+                         <label for="dashboard-branch-filter" class="font-bold text-gray-700">Sucursal:</label>
+                         <select id="dashboard-branch-filter" class="rounded-md border-gray-300 shadow-sm"></select>
+                     </div>
+                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                         <div class="bg-white p-6 rounded-xl shadow-md flex items-center justify-between"><div><p class="text-sm text-gray-500">Ventas Hoy</p><p id="ventas-hoy" class="text-2xl font-bold text-gray-800">$0.00</p></div><div class="bg-blue-100 text-blue-600 p-3 rounded-full"><i class="fas fa-dollar-sign fa-lg"></i></div></div>
+                         <div class="bg-white p-6 rounded-xl shadow-md flex items-center justify-between"><div><p class="text-sm text-gray-500">Facturas Emitidas</p><p id="facturas-emitidas" class="text-2xl font-bold text-gray-800">0</p></div><div class="bg-green-100 text-green-600 p-3 rounded-full"><i class="fas fa-receipt fa-lg"></i></div></div>
+                         <div class="bg-white p-6 rounded-xl shadow-md flex items-center justify-between"><div><p class="text-sm text-gray-500">Productos Activos</p><p id="productos-activos" class="text-2xl font-bold text-gray-800">0</p></div><div class="bg-yellow-100 text-yellow-600 p-3 rounded-full"><i class="fas fa-box-open fa-lg"></i></div></div>
+                         <div class="bg-white p-6 rounded-xl shadow-md flex items-center justify-between"><div><p class="text-sm text-gray-500">Productos Bajo Stock</p><p id="low-stock-products" class="text-2xl font-bold text-red-600">0</p></div><div class="bg-red-100 text-red-600 p-3 rounded-full"><i class="fas fa-exclamation-triangle fa-lg"></i></div></div>
+                     </div>
+                     <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                         <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                             <h2 class="text-xl font-bold text-gray-800 mb-4">Documentos Recientes</h2>
+                             <div class="overflow-x-auto"><table class="w-full text-left responsive-table"><thead><tr class="text-sm text-gray-500 border-b"><th class="p-3">#</th><th class="p-3">Tipo</th><th class="p-3">Cliente</th><th class="p-3">Total</th><th class="p-3">Acciones</th></tr></thead><tbody id="recent-documents-table"></tbody></table></div>
+                         </div>
+                         <div class="bg-white p-6 rounded-xl shadow-md">
+                             <h2 class="text-xl font-bold text-gray-800 mb-4">Recordatorios Fiscales</h2>
+                             <div id="tax-reminders" class="space-y-4"></div>
+                         </div>
+                     </div>
+                 </section>
+                 <section id="inventario" class="page hidden">
+                     <div class="bg-white p-6 rounded-xl shadow-md">
+                         <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                             <h2 class="text-xl font-bold text-gray-800">Gestión de Inventario</h2>
+                             <div class="flex flex-wrap gap-2" data-role-required="administrador">
+                                 <input type="file" id="excel-import-input" class="hidden" accept=".xlsx, .xls"><button id="import-excel-btn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"><i class="fas fa-file-excel mr-2"></i>Importar Excel</button>
+                                 <button id="export-csv-btn" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700"><i class="fas fa-download mr-2"></i>Exportar CSV</button>
+                                 <button id="add-stock-btn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600"><i class="fas fa-plus-circle mr-2"></i>Añadir Stock</button>
+                                 <button id="add-product-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"><i class="fas fa-plus mr-2"></i>Añadir Producto</button>
+                             </div>
+                         </div>
+                         <div class="overflow-x-auto"><table class="w-full text-left responsive-table"><thead><tr class="text-sm text-gray-500 border-b"><th class="p-3">Código</th><th class="p-3">Nombre</th><th class="p-3">Categoría</th><th class="p-3">Precio Unit.</th><th class="p-3">Stock</th><th class="p-3">QR</th><th class="p-3">Acciones</th></tr></thead><tbody id="inventory-table"></tbody></table></div>
+                     </div>
+                 </section>
+                 <section id="facturacion" class="page hidden">
+                     <div class="bg-white p-6 rounded-xl shadow-md">
+                         <div class="flex justify-between items-center border-b pb-4 mb-4">
+                             <div><h2 class="text-xl font-bold text-gray-800">Nueva Factura de Venta</h2><p id="fiscal-range-info" class="text-sm text-gray-500"></p></div>
+                         </div>
+                         <form id="invoice-form" class="">
+                             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                 <div><label class="block text-sm font-medium text-gray-700">Nombre del Cliente</label><input type="text" id="client-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                 <div class="col-span-2"><label class="block text-sm font-medium text-gray-700">RUC del Cliente</label><div class="flex items-center"><input type="text" id="client-ruc" placeholder="Ej: 155609424-2-2021" class="mt-1 block w-full rounded-l-md border-gray-300 shadow-sm" required><button type="button" id="verify-ruc-btn" class="bg-gray-200 px-3 mt-1 border-y border-r rounded-r-md hover:bg-gray-300"><i class="fas fa-search text-gray-600"></i></button></div></div>
+                             </div>
+                             <div class="mt-6"><h3 class="text-lg font-medium text-gray-800">Productos/Servicios</h3><div id="invoice-items-container" class="mt-2 space-y-4"></div><button type="button" id="add-invoice-item-btn" class="mt-4 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 flex items-center"><i class="fas fa-plus mr-2"></i>Añadir Línea</button></div>
+                             <div class="mt-6 border-t pt-6 flex justify-end"><div class="w-full md:w-1/3 space-y-2"><div class="flex justify-between"><span class="font-medium text-gray-600">Subtotal:</span><span id="invoice-subtotal">$0.00</span></div><div class="flex justify-between"><span class="font-medium text-gray-600">ITBMS (7%):</span><span id="invoice-itbms">$0.00</span></div><div class="flex justify-between text-xl font-bold text-gray-800"><span>Total:</span><span id="invoice-total">$0.00</span></div></div></div>
+                             <div class="mt-8 flex justify-end"><button type="submit" class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 flex items-center font-bold"><i class="fas fa-paper-plane mr-2"></i>Emitir Factura</button></div>
+                         </form>
+                     </div>
+                 </section>
+                 <section id="notas-credito" class="page hidden">
+                    <div class="bg-white p-6 rounded-xl shadow-md">
+                        <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
+                            <h2 class="text-xl font-bold text-gray-800">Gestión de Notas de Crédito</h2>
+                            <button id="show-add-nc-form-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                <i class="fas fa-plus mr-2"></i>Agregar Nota de Crédito
+                            </button>
+                        </div>
+
+                        <div id="add-nc-form-container" class="hidden border-b pb-6 mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <div><h3 class="text-xl font-bold text-gray-800">Nueva Nota de Crédito</h3><p id="nc-fiscal-range-info" class="text-sm text-gray-500"></p></div>
+                            </div>
+                            <form id="credit-note-form">
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    <div><label class="block text-sm font-medium text-gray-700">Nombre del Cliente</label><input type="text" id="nc-client-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                    <div class="col-span-2"><label class="block text-sm font-medium text-gray-700">RUC del Cliente</label><input type="text" id="nc-client-ruc" placeholder="Ej: 155609424-2-2021" class="mt-1 block w-full rounded-l-md border-gray-300 shadow-sm" required></div>
+                                </div>
+                                <div class="mt-4"><div><label class="block text-sm font-medium text-gray-700">Factura Original Afectada</label><input type="number" id="nc-original-invoice-id" placeholder="Ingrese el # de factura" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div></div>
+                                <div class="mt-6"><h3 class="text-lg font-medium text-gray-800">Productos/Servicios a Devolver</h3><div id="nc-items-container" class="mt-2 space-y-4"></div><button type="button" id="add-nc-item-btn" class="mt-4 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 flex items-center"><i class="fas fa-plus mr-2"></i>Añadir Línea</button></div>
+                                <div class="mt-6 border-t pt-6 flex justify-end"><div class="w-full md:w-1/3 space-y-2"><div class="flex justify-between"><span class="font-medium text-gray-600">Subtotal:</span><span id="nc-subtotal">$0.00</span></div><div class="flex justify-between"><span class="font-medium text-gray-600">ITBMS (7%):</span><span id="nc-itbms">$0.00</span></div><div class="flex justify-between text-xl font-bold text-gray-800"><span>Total:</span><span id="nc-total">$0.00</span></div></div></div>
+                                <div class="mt-8 flex justify-end"><button type="submit" class="bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 flex items-center font-bold"><i class="fas fa-paper-plane mr-2"></i>Emitir Nota de Crédito</button></div>
+                            </form>
+                        </div>
+                        
+                        <div class="mb-4 p-4 bg-gray-50 rounded-lg">
+                            <h3 class="font-bold text-gray-700 mb-2">Filtrar Notas de Crédito</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <div>
+                                    <label for="nc-filter-branch" class="block text-sm font-medium text-gray-700">Sucursal</label>
+                                    <select id="nc-filter-branch" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
+                                </div>
+                                <div>
+                                    <label for="nc-filter-date" class="block text-sm font-medium text-gray-700">Fecha</label>
+                                    <input type="date" id="nc-filter-date" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                <div>
+                                    <label for="nc-filter-client" class="block text-sm font-medium text-gray-700">Cliente / RUC</label>
+                                    <input type="text" id="nc-filter-client" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Nombre o RUC...">
+                                </div>
+                                 <div>
+                                    <label for="nc-filter-invoice" class="block text-sm font-medium text-gray-700">Factura Afectada #</label>
+                                    <input type="number" id="nc-filter-invoice" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="Número...">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="credit-notes-list-container" class="overflow-x-auto">
+                            <!-- Credit notes table will be rendered here -->
+                        </div>
+                    </div>
+                 </section>
+                 <section id="pagos-reportes" class="page hidden">
+                     <div class="bg-white p-6 rounded-xl shadow-md">
+                         <h2 class="text-xl font-bold text-gray-800 mb-6">Declaración de ITBMS (Informe 43)</h2>
+                         <div class="flex flex-wrap gap-4 mb-6 items-end">
+                             <div>
+                                <label for="report-branch-filter" class="block text-sm font-medium text-gray-700">Sucursal</label>
+                                <select id="report-branch-filter" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select>
+                             </div>
+                             <div><label for="report-month" class="block text-sm font-medium text-gray-700">Mes</label><select id="report-month" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select></div>
+                             <div><label for="report-year" class="block text-sm font-medium text-gray-700">Año</label><select id="report-year" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></select></div>
+                             <button id="generate-report-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Generar</button>
+                         </div>
+                         <div id="itbms-report-content" class="hidden">
+                             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6 border-t pt-6">
+                                 <div class="bg-gray-50 p-4 rounded-lg"><p class="text-sm text-gray-600">Ventas Gravadas</p><p id="report-ventas-gravadas" class="text-lg font-bold text-gray-800">$0.00</p></div>
+                                 <div class="bg-gray-50 p-4 rounded-lg"><p class="text-sm text-gray-600">ITBMS Cobrado (Débito)</p><p id="report-itbms-cobrado" class="text-lg font-bold text-gray-800">$0.00</p></div>
+                                 <div class="bg-gray-50 p-4 rounded-lg"><p class="text-sm text-gray-600">ITBMS Pagado (Crédito)</p><p id="report-itbms-credito" class="text-lg font-bold text-gray-800">$0.00</p></div>
+                             </div>
+                             <div class="text-center bg-blue-50 border-2 border-blue-200 p-6 rounded-xl">
+                                 <p class="text-lg text-blue-800">Total ITBMS a Pagar a la DGI</p>
+                                 <p id="report-itbms-total" class="text-4xl font-extrabold text-blue-900 my-2">$0.00</p>
+                                 <div class="flex justify-center gap-2 mt-4">
+                                     <button id="export-etax-btn" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"><i class="fas fa-file-excel mr-2"></i>Exportar para e-Tax</button>
+                                     <button id="pay-etax-btn" class="bg-blue-800 text-white px-4 py-2 rounded-lg hover:bg-blue-900"><i class="fas fa-shield-alt mr-2"></i>Pagar con e-Tax 2.0</button>
+                                 </div>
+                             </div>
+                         </div>
+                     </div>
+                     <div class="mt-8 bg-white p-6 rounded-xl shadow-md">
+                         <div class="flex justify-between items-center mb-4"><h2 class="text-xl font-bold text-gray-800">Registro de Pagos a DGI</h2><button id="register-payment-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700" data-role-required="administrador,contador"><i class="fas fa-plus mr-2"></i>Registrar Pago</button></div>
+                         <div id="dgi-payments-table" class="overflow-x-auto"></div>
+                     </div>
+                 </section>
+                 <section id="perfil" class="page hidden">
+                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                         <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-md flex flex-col items-center">
+                             <h2 class="text-xl font-bold text-gray-800 mb-4">Foto de Perfil</h2>
+                             <div class="profile-picture-container rounded-full w-40 h-40 mb-4">
+                                 <img id="profile-page-pic" src="https://placehold.co/160x160/60a5fa/ffffff?text=U" alt="Foto de perfil" class="w-40 h-40 rounded-full object-cover">
+                                 <div class="profile-picture-overlay rounded-full"><i class="fas fa-camera fa-2x"></i></div>
+                             </div>
+                             <input type="file" id="profile-pic-input" class="hidden" accept="image/*">
+                             <p class="text-sm text-gray-500 text-center">Haz clic en la imagen para cambiarla.</p>
+                         </div>
+                         <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
+                              <h2 class="text-xl font-bold text-gray-800 mb-6">Información Personal</h2>
+                             <form id="profile-details-form">
+                                 <div class="space-y-4">
+                                     <div><label for="profile-name" class="block text-sm font-medium text-gray-700">Nombre Completo</label><input type="text" id="profile-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                     <div><label for="profile-email" class="block text-sm font-medium text-gray-700">Correo Electrónico</label><input type="email" id="profile-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                     <div><label for="profile-phone" class="block text-sm font-medium text-gray-700">Número de Teléfono</label><input type="tel" id="profile-phone" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                     <div><label class="block text-sm font-medium text-gray-700">Rol de Usuario</label><p id="profile-role" class="mt-1 block w-full rounded-md bg-gray-100 p-2 text-gray-600">N/A</p></div>
+                                 </div>
+                                 <div class="mt-8 flex justify-end"><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Guardar Cambios</button></div>
+                             </form>
+                         </div>
+                         <div class="lg:col-span-3 bg-white p-6 rounded-xl shadow-md">
+                             <h2 class="text-xl font-bold text-gray-800 mb-6">Cambiar Contraseña</h2>
+                             <form id="profile-password-change-form">
+                                 <div class="space-y-4">
+                                     <div><label for="profile-new-password" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label><input type="password" id="profile-new-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                     <div><label for="profile-confirm-password" class="block text-sm font-medium text-gray-700">Confirmar Nueva Contraseña</label><input type="password" id="profile-confirm-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                                     <div id="profile-password-error" class="hidden text-red-500 text-sm">Las contraseñas no coinciden.</div>
+                                 </div>
+                                 <div class="mt-8 flex justify-end"><button type="submit" class="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700">Actualizar Contraseña</button></div>
+                             </form>
+                         </div>
+                     </div>
+                 </section>
+                 <section id="access-denied" class="page hidden text-center">
+                     <div class="bg-white p-8 rounded-xl shadow-md"><i class="fas fa-exclamation-triangle text-5xl text-red-500 mb-4"></i><h2 class="text-2xl font-bold text-gray-800">Acceso Denegado</h2><p class="text-gray-600 mt-2">No tienes permiso para ver esta página.</p></div>
+                 </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="modal-backdrop" class="modal-backdrop"></div>
+
+    <!-- Change Password Modal -->
+    <div id="change-password-modal" class="modal bg-white p-8 rounded-xl shadow-2xl w-11/12 md:w-1/2 lg:w-1/3">
+        <h2 class="text-2xl font-bold text-gray-800 mb-2">Actualización de Seguridad Requerida</h2>
+        <p class="text-gray-600 mb-6">Por su seguridad, debe cambiar su contraseña temporal antes de continuar.</p>
+        <form id="force-password-change-form">
+            <div class="space-y-4">
+                <div><label for="new-password" class="block text-sm font-medium text-gray-700">Nueva Contraseña</label><input type="password" id="new-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                <div><label for="confirm-password" class="block text-sm font-medium text-gray-700">Confirmar Nueva Contraseña</label><input type="password" id="confirm-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" required></div>
+                <div id="force-password-error" class="hidden text-red-500 text-sm">Las contraseñas no coinciden.</div>
+            </div>
+            <div class="mt-8 flex justify-end"><button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Establecer Contraseña y Continuar</button></div>
+        </form>
+    </div>
+
+    <!-- Product Modal -->
+    <div id="product-modal" class="modal bg-white p-8 rounded-xl shadow-2xl w-11/12 md:w-1/2 lg:w-1/3">
+        <!-- Content will be injected by JS -->
+    </div>
+    
+    <!-- QR Code Modal -->
+    <div id="qr-code-modal" class="modal bg-white p-8 rounded-xl shadow-2xl w-11/12 sm:w-auto">
+        <!-- Content will be injected by JS -->
+    </div>
+
+    <!-- View Invoice Modal -->
+    <div id="view-invoice-modal" class="modal bg-white p-0 rounded-xl shadow-2xl w-11/12 md:w-3/4 lg:w-1/2">
+        <!-- Content will be injected by JS -->
+    </div>
+    
+    <!-- Other Modals -->
+    <div id="dgi-validation-modal" class="modal"></div>
+    <div id="send-email-modal" class="modal"></div>
+    <div id="add-stock-modal" class="modal"></div>
+    <div id="kardex-modal" class="modal"></div>
+    <div id="register-payment-modal" class="modal"></div>
+    <div id="etax-payment-modal" class="modal"></div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-green-500 text-white py-3 px-6 rounded-lg shadow-xl opacity-0 translate-y-10 transition-all duration-300 no-print"><p id="toast-message"></p></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- MAIN SOFTWARE & CLIENT COMPANY CONFIGURATION ---
+    const mainSoftwareProfile = {
+        name: 'Trilogy Solution',
+        logoUrl: null // 'https://example.com/trilogy_logo.png'
+    };
+
+    const clientCompanyProfile = {
+        name: 'Innovatech Panamá S.A.',
+        logoUrl: null, // 'https://example.com/innovatech_logo.png'
+        ruc: '8-NT-1-456789 DV 90',
+        address: 'Ciudad del Saber, Clayton, Panamá'
+    };
+
+    const sucursales = [
+        { id: 1, name: 'Sede Principal' },
+        { id: 2, name: 'Sucursal David' },
+        { id: 3, name: 'Sucursal Colón' }
+    ];
+
+    // --- STATE & USER MANAGEMENT ---
+    let authorizedUsers = [
+        { email: 'admin@innovatech.com', password: 'admin123', role: 'administrador', name: 'Gerente General', phone: '6677-8899', photo: null, tempPassword: false, sucursalId: 1 },
+        { email: 'vendedor@innovatech.com', password: 'vendedor123', role: 'vendedor', name: 'Carlos Ruiz', phone: '6123-4567', photo: null, tempPassword: false, sucursalId: 1 },
+        { email: 'vendedor2@innovatech.com', password: 'vendedor123', role: 'vendedor', name: 'Laura Martinez', phone: '6123-4568', photo: null, tempPassword: false, sucursalId: 2 },
+        { email: 'contador@innovatech.com', password: 'conta123', role: 'contador', name: 'Sofia Chen', phone: '6987-6543', photo: null, tempPassword: false, sucursalId: 1 }
+    ];
+    let currentUser = null;
+    const userPermissions = {
+        'administrador': { pages: ['dashboard', 'inventario', 'facturacion', 'notas-credito', 'pagos-reportes', 'perfil'] },
+        'vendedor': { pages: ['dashboard', 'inventario', 'facturacion', 'notas-credito', 'perfil'] },
+        'contador': { pages: ['dashboard', 'pagos-reportes', 'perfil'] }
+    };
+    
+    // --- DATA STATE ---
+    let products = [ { id: 1, code: 'CONS-WEB-01', name: 'Servicio de Consultoría Web', description: '1 hora de consultoría especializada', category: 'Servicios Digitales', supplier: 'Innovatech', price: 150.00, stock: 999, unit: 'hora', lowStockThreshold: 999 }, { id: 2, code: 'DEV-LP-01', name: 'Desarrollo de Landing Page', description: 'Página de aterrizaje responsiva', category: 'Desarrollo Web', supplier: 'Innovatech', price: 800.00, stock: 8, unit: 'und', lowStockThreshold: 5 }, { id: 3, code: 'HW-LAP-PRO15', name: 'Laptop Pro 15"', description: 'Core i7, 16GB RAM, 512GB SSD', category: 'Hardware', supplier: 'Compusale SA', price: 1250.00, stock: 25, unit: 'und', lowStockThreshold: 10 }, { id: 4, code: 'HW-MSE-ERG', name: 'Mouse Inalámbrico Ergo', description: 'Mouse ergonómico recargable', category: 'Hardware', supplier: 'TechSupply', price: 45.50, stock: 78, unit: 'und', lowStockThreshold: 20 } ];
+    let invoices = [];
+    let creditNotes = [];
+    let dgiPayments = [];
+    let inventoryMovements = [];
+    let fiscalSettings = { invoice: { rangeStart: 1001, rangeEnd: 2000, nextId: 1001 }, creditNote: { rangeStart: 1, rangeEnd: 1000, nextId: 1 } };
+    let nextProductId = 5;
+    let nextPaymentId = 1;
+    let nextMovementId = 1;
+
+    // --- UI ELEMENTS ---
+    const loginScreen = document.getElementById('login-screen');
+    const appContainer = document.getElementById('app-container');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    const logoutBtn = document.getElementById('logout-btn');
+    const pageTitle = document.getElementById('page-title');
+    const sidebarItems = document.querySelectorAll('.sidebar-item');
+    const pages = document.querySelectorAll('.page');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const toast = document.getElementById('toast');
+    const toastMessage = document.getElementById('toast-message');
+    const changePasswordModal = document.getElementById('change-password-modal');
+    const forcePasswordChangeForm = document.getElementById('force-password-change-form');
+    const profileDetailsForm = document.getElementById('profile-details-form');
+    const profilePasswordChangeForm = document.getElementById('profile-password-change-form');
+    const profilePicContainer = document.querySelector('.profile-picture-container');
+    const profilePicInput = document.getElementById('profile-pic-input');
+    const profilePagePic = document.getElementById('profile-page-pic');
+    const headerProfilePic = document.getElementById('header-profile-pic');
+
+    // --- INITIALIZATION ---
+    function applyCompanyBranding() {
+        document.title = `${mainSoftwareProfile.name} | ${clientCompanyProfile.name}`;
+        
+        // Login Screen
+        document.getElementById('main-software-name-login').textContent = mainSoftwareProfile.name;
+        document.getElementById('login-company-name').textContent = clientCompanyProfile.name;
+        const loginLogo = document.getElementById('login-logo');
+        loginLogo.src = clientCompanyProfile.logoUrl || `https://placehold.co/150x50/ffffff/1e40af?text=${encodeURIComponent(clientCompanyProfile.name.split(' ')[0])}`;
+        loginLogo.alt = `Logo de ${clientCompanyProfile.name}`;
+
+        // Sidebar
+        document.getElementById('main-software-name-sidebar').textContent = mainSoftwareProfile.name;
+        document.getElementById('sidebar-company-name').textContent = clientCompanyProfile.name;
+        const mainSidebarLogo = document.getElementById('main-software-logo-sidebar');
+        mainSidebarLogo.src = mainSoftwareProfile.logoUrl || `https://placehold.co/32x32/60a5fa/ffffff?text=${encodeURIComponent(mainSoftwareProfile.name.charAt(0))}`;
+        const clientSidebarLogo = document.getElementById('sidebar-logo');
+        clientSidebarLogo.src = clientCompanyProfile.logoUrl || `https://placehold.co/24x24/ffffff/1e40af?text=${encodeURIComponent(clientCompanyProfile.name.charAt(0))}`;
+    }
+    applyCompanyBranding();
+
+    // --- LOGIN/LOGOUT LOGIC ---
+    loginForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
+        const foundUser = authorizedUsers.find(user => user.email === email && user.password === password);
+        
+        if (foundUser) {
+            currentUser = foundUser;
+            loginError.classList.add('hidden');
+            document.getElementById('password').value = '';
+            
+            if (currentUser.tempPassword) {
+                openModal(changePasswordModal);
+            } else {
+                initializeApp();
+            }
+        } else {
+            loginError.classList.remove('hidden');
+        }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        currentUser = null;
+        appContainer.classList.add('hidden');
+        loginScreen.classList.remove('hidden');
+        window.location.hash = '';
+        showToast('Has cerrado sesión.');
+    });
+
+    function initializeApp() {
+        loginScreen.classList.add('hidden');
+        appContainer.classList.remove('hidden');
+        document.getElementById('user-name-display').textContent = currentUser.name;
+        document.getElementById('user-role-display').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+        const userBranch = sucursales.find(s => s.id === currentUser.sucursalId);
+        document.getElementById('header-branch-display').textContent = `Sucursal: ${userBranch ? userBranch.name : 'N/A'}`;
+        
+        updateProfilePictures();
+        applyRolePermissions();
+        setupEventListeners();
+        populateBranchFilters();
+        showPage(window.location.hash || '#dashboard');
+        renderAll();
+        showToast(`Bienvenido, ${currentUser.name}!`);
+    }
+
+    // --- PASSWORD & PROFILE CHANGE LOGIC ---
+    forcePasswordChangeForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newPassword = document.getElementById('new-password').value;
+        const confirmPassword = document.getElementById('confirm-password').value;
+        const errorDiv = document.getElementById('force-password-error');
+        if (newPassword.length < 6) { errorDiv.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errorDiv.classList.remove('hidden'); return; }
+        if (newPassword !== confirmPassword) { errorDiv.textContent = 'Las contraseñas no coinciden.'; errorDiv.classList.remove('hidden'); return; }
+        errorDiv.classList.add('hidden');
+        currentUser.password = newPassword;
+        currentUser.tempPassword = false;
+        closeModal(changePasswordModal);
+        initializeApp();
+    });
+
+    profileDetailsForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        currentUser.name = document.getElementById('profile-name').value;
+        currentUser.email = document.getElementById('profile-email').value;
+        currentUser.phone = document.getElementById('profile-phone').value;
+        
+        const userIndex = authorizedUsers.findIndex(user => user.email === currentUser.email);
+        if (userIndex !== -1) authorizedUsers[userIndex] = { ...authorizedUsers[userIndex], ...currentUser };
+        
+        document.getElementById('user-name-display').textContent = currentUser.name;
+        showToast('Información personal actualizada.');
+    });
+
+    profilePasswordChangeForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const newPassword = document.getElementById('profile-new-password').value;
+        const confirmPassword = document.getElementById('profile-confirm-password').value;
+        const errorDiv = document.getElementById('profile-password-error');
+        if (newPassword.length < 6) { errorDiv.textContent = 'La contraseña debe tener al menos 6 caracteres.'; errorDiv.classList.remove('hidden'); return; }
+        if (newPassword !== confirmPassword) { errorDiv.textContent = 'Las contraseñas no coinciden.'; errorDiv.classList.remove('hidden'); return; }
+        errorDiv.classList.add('hidden');
+        currentUser.password = newPassword;
+        profilePasswordChangeForm.reset();
+        showToast('Contraseña actualizada con éxito.');
+    });
+
+    profilePicContainer.addEventListener('click', () => profilePicInput.click());
+    profilePicInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                currentUser.photo = event.target.result;
+                updateProfilePictures();
+                showToast('Foto de perfil actualizada.');
+            }
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function updateProfilePictures() {
+        const photoSrc = currentUser.photo || `https://placehold.co/160x160/60a5fa/ffffff?text=${currentUser.name.charAt(0)}`;
+        profilePagePic.src = photoSrc;
+        headerProfilePic.src = photoSrc;
+    }
+
+    // --- PERMISSIONS LOGIC ---
+    function applyRolePermissions() {
+        if (!currentUser) return;
+        document.querySelectorAll('[data-role-required]').forEach(el => {
+            const requiredRoles = el.dataset.roleRequired.split(',');
+            el.style.display = requiredRoles.includes(currentUser.role) ? 'flex' : 'none';
+        });
+    }
+
+    // --- NAVIGATION ---
+    function showPage(hash) {
+        if (!currentUser) return;
+        const targetId = hash.substring(1) || 'dashboard';
+        const permissions = userPermissions[currentUser.role];
+
+        if (!permissions.pages.includes(targetId)) {
+            pages.forEach(page => page.classList.toggle('hidden', page.id !== 'access-denied'));
+            pageTitle.textContent = 'Acceso Denegado';
+            return;
+        }
+
+        if (targetId === 'perfil') renderProfilePage();
+        if (targetId === 'facturacion') renderFacturacionPage();
+        if (targetId === 'notas-credito') renderNotasCreditoPage();
+        if (targetId === 'pagos-reportes') renderPagosReportes();
+        
+        pages.forEach(page => page.classList.toggle('hidden', page.id !== targetId));
+        sidebarItems.forEach(item => item.classList.toggle('active', item.getAttribute('href') === `#${targetId}`));
+        const titleEl = document.querySelector(`.sidebar-item[href="#${targetId}"] span`);
+        if (titleEl) pageTitle.textContent = titleEl.textContent;
+        if (window.innerWidth < 768) document.getElementById('sidebar').classList.remove('open');
+    }
+
+    function renderProfilePage() {
+        if (!currentUser) return;
+        document.getElementById('profile-name').value = currentUser.name;
+        document.getElementById('profile-email').value = currentUser.email;
+        document.getElementById('profile-phone').value = currentUser.phone || '';
+        document.getElementById('profile-role').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+        updateProfilePictures();
+    }
+
+    // --- UTILITIES ---
+    const formatCurrency = (amount) => `$${Number(amount).toFixed(2)}`;
+    function showToast(message, type = 'success') {
+        toastMessage.textContent = message;
+        toast.className = `fixed bottom-5 right-5 text-white py-3 px-6 rounded-lg shadow-xl transition-all duration-300 no-print ${type === 'success' ? 'bg-green-500' : 'bg-red-500'}`;
+        toast.classList.remove('opacity-0', 'translate-y-10');
+        setTimeout(() => toast.classList.add('opacity-0', 'translate-y-10'), 3000);
+    }
+
+    function openModal(modal) {
+        if(modal) {
+            modalBackdrop.style.display = 'block';
+            if (modal.id === 'qr-code-modal') {
+                modal.style.display = 'flex';
+            } else {
+                modal.style.display = 'block';
+            }
+        }
+    }
+
+    function closeModal(modal) {
+        if(modal) {
+            modal.style.display = 'none';
+            modalBackdrop.style.display = 'none';
+            modal.innerHTML = '';
+            if (modal.id === 'qr-code-modal') {
+                modal.classList.remove('flex', 'flex-col', 'items-center');
+            }
+        }
+    }
+    
+    // --- EVENT LISTENERS SETUP ---
+    function setupEventListeners() {
+        // One-time setup
+        window.addEventListener('hashchange', () => showPage(window.location.hash));
+        sidebarItems.forEach(item => item.addEventListener('click', (e) => {
+            window.location.hash = e.currentTarget.getAttribute('href');
+        }));
+        document.getElementById('menu-toggle').addEventListener('click', () => document.getElementById('sidebar').classList.toggle('open'));
+        modalBackdrop.addEventListener('click', () => {
+            document.querySelectorAll('.modal').forEach(m => closeModal(m));
+        });
+
+        // Inventory Page
+        document.getElementById('add-product-btn').addEventListener('click', () => openProductModal());
+        document.getElementById('import-excel-btn').addEventListener('click', () => document.getElementById('excel-import-input').click());
+        document.getElementById('excel-import-input').addEventListener('change', handleExcelImport);
+        document.getElementById('export-csv-btn').addEventListener('click', exportInventoryToCSV);
+
+        // Facturacion Page
+        document.getElementById('invoice-form').addEventListener('submit', handleInvoiceSubmit);
+        document.getElementById('add-invoice-item-btn').addEventListener('click', () => addInvoiceItem());
+
+        // Notas de Credito Page
+        document.getElementById('show-add-nc-form-btn').addEventListener('click', toggleAddNCForm);
+        document.getElementById('credit-note-form').addEventListener('submit', handleCreditNoteSubmit);
+        document.getElementById('add-nc-item-btn').addEventListener('click', () => addCreditNoteItem());
+        document.getElementById('nc-filter-branch').addEventListener('change', applyNCFiltersAndRender);
+        document.getElementById('nc-filter-date').addEventListener('change', applyNCFiltersAndRender);
+        document.getElementById('nc-filter-client').addEventListener('input', applyNCFiltersAndRender);
+        document.getElementById('nc-filter-invoice').addEventListener('input', applyNCFiltersAndRender);
+
+        // Dashboard
+        document.getElementById('dashboard-branch-filter').addEventListener('change', () => renderDashboard());
+
+        // Pagos y Reportes Page
+        document.getElementById('generate-report-btn').addEventListener('click', generateItbmsReport);
+        document.getElementById('register-payment-btn').addEventListener('click', () => showToast('Función no implementada.'));
+    }
+
+    // --- RENDER FUNCTIONS ---
+    function renderAll() {
+        if (!currentUser) return;
+        renderDashboard();
+        renderInventory();
+        renderDgiPaymentsTable();
+    }
+
+    function renderDashboard() {
+        const branchFilterId = document.getElementById('dashboard-branch-filter').value;
+        const filterByBranch = branchFilterId !== 'all';
+
+        const relevantInvoices = filterByBranch ? invoices.filter(i => i.sucursalId === parseInt(branchFilterId)) : invoices;
+
+        const today = new Date().toDateString();
+        const ventasHoy = relevantInvoices.filter(inv => new Date(inv.date).toDateString() === today).reduce((sum, inv) => sum + inv.total, 0);
+        document.getElementById('ventas-hoy').textContent = formatCurrency(ventasHoy);
+        document.getElementById('facturas-emitidas').textContent = relevantInvoices.length;
+        document.getElementById('productos-activos').textContent = products.length; // Global
+        const lowStockCount = products.filter(p => p.stock < p.lowStockThreshold).length; // Global
+        document.getElementById('low-stock-products').textContent = lowStockCount;
+
+        const relevantCreditNotes = filterByBranch ? creditNotes.filter(cn => cn.sucursalId === parseInt(branchFilterId)) : creditNotes;
+        const recentDocsTable = document.getElementById('recent-documents-table');
+        const allDocs = [...relevantInvoices.map(d => ({...d, type: 'Factura'})), ...relevantCreditNotes.map(d => ({...d, type: 'Nota Crédito'}))].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+        if (allDocs.length === 0) {
+            recentDocsTable.innerHTML = '<tr><td colspan="5" class="text-center p-4 text-gray-500">No hay documentos recientes para esta sucursal.</td></tr>';
+        } else {
+            recentDocsTable.innerHTML = allDocs.map(doc => `
+                <tr class="border-b hover:bg-gray-50">
+                    <td data-label="#" class="p-3 font-medium text-blue-600">${doc.id}</td>
+                    <td data-label="Tipo" class="p-3">${doc.type}</td>
+                    <td data-label="Cliente" class="p-3">${doc.client.name}</td>
+                    <td data-label="Total" class="p-3 font-semibold">${formatCurrency(doc.total)}</td>
+                    <td data-label="Acciones" class="p-3"><button class="view-invoice-btn text-blue-600 hover:underline" data-doc-id="${doc.id}" data-doc-type="${doc.type.toLowerCase().replace(' ', '-')}">Ver</button></td>
+                </tr>`).join('');
+        }
+        document.querySelectorAll('.view-invoice-btn').forEach(btn => btn.addEventListener('click', (e) => {
+            const { docId, docType } = e.target.dataset;
+            openViewInvoiceModal(parseInt(docId), docType);
+        }));
+
+        const remindersContainer = document.getElementById('tax-reminders');
+        const todaySim = new Date("2025-07-19T14:39:00");
+        const currentMonth = todaySim.getMonth();
+        const currentDay = todaySim.getDate();
+        const lastMonthName = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"][currentMonth === 0 ? 11 : currentMonth - 1];
+        const itbmsDueDate = 15;
+        let itbmsStatus, itbmsColor, itbmsText;
+        if (currentDay > itbmsDueDate) {
+            itbmsStatus = 'VENCIDO'; itbmsColor = 'red'; itbmsText = `Declaración de ITBMS (${lastMonthName}) venció el ${itbmsDueDate} de Julio.`;
+        } else {
+            itbmsStatus = 'PRÓXIMO A VENCER'; itbmsColor = 'yellow'; itbmsText = `Declaración de ITBMS (${lastMonthName}) vence el ${itbmsDueDate} de Julio.`;
+        }
+        remindersContainer.innerHTML = `
+            <div class="border-l-4 border-${itbmsColor}-500 p-3 bg-${itbmsColor}-50">
+                <p class="font-bold text-${itbmsColor}-800">${itbmsStatus}</p>
+                <p class="text-sm text-gray-700">${itbmsText}</p>
+            </div>
+            <div class="border-l-4 border-blue-500 p-3 bg-blue-50">
+                <p class="font-bold text-blue-800">INFORMATIVO</p>
+                <p class="text-sm text-gray-700">La declaración anual de ISR para personas jurídicas vence el 31 de Marzo.</p>
+            </div>`;
+    }
+
+    function renderInventory() {
+        const tableBody = document.getElementById('inventory-table');
+        if (!tableBody) return;
+        if (products.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="7" class="text-center p-4 text-gray-500">No hay productos en el inventario.</td></tr>';
+            return;
+        }
+        tableBody.innerHTML = products.map(p => `
+            <tr class="border-b hover:bg-gray-50 ${p.stock < p.lowStockThreshold ? 'bg-red-50' : ''}">
+                <td data-label="Código" class="p-3 font-medium text-gray-700">${p.code}</td>
+                <td data-label="Nombre" class="p-3">${p.name}</td>
+                <td data-label="Categoría" class="p-3">${p.category}</td>
+                <td data-label="Precio" class="p-3">${formatCurrency(p.price)}</td>
+                <td data-label="Stock" class="p-3 font-bold ${p.stock < p.lowStockThreshold ? 'text-red-600' : 'text-gray-800'}">${p.stock} ${p.unit}</td>
+                <td data-label="QR" class="p-3 text-center">
+                    <button class="show-qr-btn text-gray-600 hover:text-blue-800" data-id="${p.id}"><i class="fas fa-qrcode"></i></button>
+                </td>
+                <td data-label="Acciones" class="p-3" data-role-required="administrador">
+                    <button class="edit-product-btn text-blue-600 hover:text-blue-800 mr-2" data-id="${p.id}"><i class="fas fa-edit"></i></button>
+                    <button class="delete-product-btn text-red-600 hover:text-red-800" data-id="${p.id}"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>
+        `).join('');
+
+        applyRolePermissions();
+
+        document.querySelectorAll('.edit-product-btn').forEach(btn => btn.addEventListener('click', (e) => openProductModal(parseInt(e.currentTarget.dataset.id))));
+        document.querySelectorAll('.delete-product-btn').forEach(btn => btn.addEventListener('click', (e) => deleteProduct(parseInt(e.currentTarget.dataset.id))));
+        document.querySelectorAll('.show-qr-btn').forEach(btn => btn.addEventListener('click', (e) => showProductQR(parseInt(e.currentTarget.dataset.id))));
+    }
+
+    function renderFacturacionPage() {
+        const { rangeStart, rangeEnd, nextId } = fiscalSettings.invoice;
+        document.getElementById('fiscal-range-info').textContent = `Factura #${nextId} (Rango: ${rangeStart}-${rangeEnd})`;
+        
+        const invoiceForm = document.getElementById('invoice-form');
+        invoiceForm.reset();
+        document.getElementById('invoice-items-container').innerHTML = '';
+        addInvoiceItem();
+        updateInvoiceTotals();
+    }
+    
+    function renderPagosReportes() {
+        const monthSelect = document.getElementById('report-month');
+        const yearSelect = document.getElementById('report-year');
+        const months = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+        monthSelect.innerHTML = months.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+        
+        const currentYear = new Date().getFullYear();
+        let yearOptions = '';
+        for (let y = currentYear; y >= 2020; y--) {
+            yearOptions += `<option value="${y}">${y}</option>`;
+        }
+        yearSelect.innerHTML = yearOptions;
+        
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        monthSelect.value = lastMonth.getMonth();
+        yearSelect.value = lastMonth.getFullYear();
+
+        document.getElementById('itbms-report-content').classList.add('hidden');
+    }
+
+    function renderDgiPaymentsTable() {
+        const container = document.getElementById('dgi-payments-table');
+        if (!container) return;
+        if (dgiPayments.length === 0) {
+            container.innerHTML = '<p class="text-center p-4 text-gray-500">No hay pagos registrados.</p>';
+            return;
+        }
+        container.innerHTML = `
+            <table class="w-full text-left responsive-table">
+                <thead><tr class="text-sm text-gray-500 border-b"><th class="p-3">Fecha</th><th class="p-3">Periodo</th><th class="p-3">Monto</th><th class="p-3">Boleta #</th></tr></thead>
+                <tbody>
+                    ${dgiPayments.map(p => `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td data-label="Fecha" class="p-3">${new Date(p.date).toLocaleDateString()}</td>
+                            <td data-label="Periodo" class="p-3">${p.period}</td>
+                            <td data-label="Monto" class="p-3 font-semibold">${formatCurrency(p.amount)}</td>
+                            <td data-label="Boleta #" class="p-3">${p.receiptNumber}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>`;
+    }
+
+    // --- INVENTORY LOGIC ---
+    function openProductModal(productId = null) {
+        const modal = document.getElementById('product-modal');
+        const isEditing = productId !== null;
+        const product = isEditing ? products.find(p => p.id === productId) : {};
+
+        modal.innerHTML = `
+            <form id="product-form">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">${isEditing ? 'Editar' : 'Añadir'} Producto</h2>
+                <input type="hidden" id="product-id" value="${isEditing ? product.id : ''}">
+                <div class="space-y-4">
+                    <div><label class="block text-sm font-medium">Código</label><input type="text" id="product-code" class="mt-1 block w-full rounded-md border-gray-300" value="${product.code || ''}" required></div>
+                    <div><label class="block text-sm font-medium">Nombre</label><input type="text" id="product-name" class="mt-1 block w-full rounded-md border-gray-300" value="${product.name || ''}" required></div>
+                    <div><label class="block text-sm font-medium">Categoría</label><input type="text" id="product-category" class="mt-1 block w-full rounded-md border-gray-300" value="${product.category || ''}"></div>
+                    <div><label class="block text-sm font-medium">Precio Unitario</label><input type="number" step="0.01" id="product-price" class="mt-1 block w-full rounded-md border-gray-300" value="${product.price || ''}" required></div>
+                    <div><label class="block text-sm font-medium">Stock Inicial</label><input type="number" id="product-stock" class="mt-1 block w-full rounded-md border-gray-300" value="${product.stock || 0}" ${isEditing ? 'disabled' : ''} required></div>
+                    <div><label class="block text-sm font-medium">Unidad (und, hora, etc.)</label><input type="text" id="product-unit" class="mt-1 block w-full rounded-md border-gray-300" value="${product.unit || 'und'}" required></div>
+                    <div><label class="block text-sm font-medium">Umbral bajo stock</label><input type="number" id="product-low-stock" class="mt-1 block w-full rounded-md border-gray-300" value="${product.lowStockThreshold || 10}" required></div>
+                </div>
+                <div class="mt-8 flex justify-end gap-3">
+                    <button type="button" id="cancel-product" class="bg-gray-200 px-4 py-2 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg">${isEditing ? 'Guardar Cambios' : 'Crear Producto'}</button>
+                </div>
+            </form>
+        `;
+        openModal(modal);
+        document.getElementById('product-form').addEventListener('submit', handleProductFormSubmit);
+        document.getElementById('cancel-product').addEventListener('click', () => closeModal(document.getElementById('product-modal')));
+    }
+    
+    function handleProductFormSubmit(e) {
+        e.preventDefault();
+        const id = document.getElementById('product-id').value;
+        const productData = {
+            code: document.getElementById('product-code').value,
+            name: document.getElementById('product-name').value,
+            category: document.getElementById('product-category').value,
+            price: parseFloat(document.getElementById('product-price').value),
+            stock: parseInt(document.getElementById('product-stock').value),
+            unit: document.getElementById('product-unit').value,
+            lowStockThreshold: parseInt(document.getElementById('product-low-stock').value),
+        };
+
+        if (id) { // Editing
+            const index = products.findIndex(p => p.id === parseInt(id));
+            productData.stock = products[index].stock; // Don't overwrite stock on edit
+            products[index] = { ...products[index], ...productData };
+            showToast('Producto actualizado.');
+        } else { // Creating
+            productData.id = nextProductId++;
+            products.push(productData);
+            showToast('Producto creado.');
+        }
+        closeModal(document.getElementById('product-modal'));
+        renderInventory();
+        renderDashboard();
+    }
+
+    function deleteProduct(productId) {
+        const isConfirmed = window.confirm('¿Está seguro que desea eliminar este producto? Esta acción no se puede deshacer.');
+        if (isConfirmed) {
+            products = products.filter(p => p.id !== productId);
+            renderInventory();
+            renderDashboard();
+            showToast('Producto eliminado.', 'error');
+        }
+    }
+
+    function showProductQR(productId) {
+        const product = products.find(p => p.id === productId);
+        if (!product) return;
+
+        const modal = document.getElementById('qr-code-modal');
+        modal.classList.add('flex', 'flex-col', 'items-center');
+
+        const qr = qrcode(0, 'L');
+        const qrData = JSON.stringify({ id: product.id, code: product.code, name: product.name });
+        qr.addData(qrData);
+        qr.make();
+
+        modal.innerHTML = `
+            <h3 class="text-xl font-bold text-gray-800 mb-1">${product.name}</h3>
+            <p class="text-sm text-gray-500 mb-4">${product.code}</p>
+            <div id="qr-code-container" class="p-2 bg-white">${qr.createImgTag(6, 8)}</div>
+            <button id="close-qr-modal" class="mt-6 bg-gray-300 px-4 py-2 rounded-lg">Cerrar</button>
+        `;
+        const img = modal.querySelector('#qr-code-container img');
+        img.style.width = '200px';
+        img.style.height = '200px';
+
+        openModal(modal);
+        document.getElementById('close-qr-modal').addEventListener('click', () => closeModal(modal));
+    }
+
+    function handleExcelImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const json = XLSX.utils.sheet_to_json(worksheet);
+
+            json.forEach(item => {
+                const newProduct = {
+                    id: nextProductId++,
+                    code: item['codigo'] || `IMP-${Date.now()}`,
+                    name: item['nombre'],
+                    category: item['categoria'] || 'Importado',
+                    price: parseFloat(item['precio']) || 0,
+                    stock: parseInt(item['stock']) || 0,
+                    unit: item['unidad'] || 'und',
+                    lowStockThreshold: parseInt(item['stock_bajo']) || 10,
+                };
+                products.push(newProduct);
+            });
+            renderInventory();
+            showToast(`${json.length} productos importados correctamente.`);
+        };
+        reader.readAsArrayBuffer(file);
+        event.target.value = ''; // Reset input
+    }
+    
+    function exportInventoryToCSV() {
+        const headers = ['id', 'code', 'name', 'category', 'price', 'stock', 'unit', 'lowStockThreshold'];
+        const csvContent = "data:text/csv;charset=utf-8," 
+            + headers.join(",") + "\n" 
+            + products.map(p => headers.map(h => `"${p[h]}"`).join(",")).join("\n");
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `inventario_${clientCompanyProfile.name.replace(/\s+/g, '_')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+    
+    // --- INVOICING & CREDIT NOTE LOGIC ---
+    function addInvoiceItem(product = null) {
+        const container = document.getElementById('invoice-items-container');
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'invoice-item grid grid-cols-12 gap-3 items-center';
+        
+        const productOptions = products.map(p => `<option value="${p.id}" ${product && p.id === product.id ? 'selected' : ''}>${p.name} (${p.code})</option>`).join('');
+
+        itemDiv.innerHTML = `
+            <div class="col-span-12 md:col-span-6"><select class="product-select w-full rounded-md border-gray-300 shadow-sm"><option value="">Seleccione un producto...</option>${productOptions}</select></div>
+            <div class="col-span-4 md:col-span-2"><input type="number" class="item-qty w-full rounded-md border-gray-300 shadow-sm" value="1" min="1"></div>
+            <div class="col-span-4 md:col-span-2"><input type="text" class="item-price w-full rounded-md border-gray-300 shadow-sm bg-gray-100" readonly></div>
+            <div class="col-span-3 md:col-span-1 text-right"><span class="item-total font-semibold"></span></div>
+            <div class="col-span-1 text-right"><button type="button" class="remove-item-btn text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button></div>
+        `;
+        container.appendChild(itemDiv);
+
+        itemDiv.querySelector('.product-select').addEventListener('change', (e) => updateItem(e, 'invoice'));
+        itemDiv.querySelector('.item-qty').addEventListener('input', (e) => updateItem(e, 'invoice'));
+        itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+            itemDiv.remove();
+            updateInvoiceTotals();
+        });
+        
+        if (product) updateItem({ target: itemDiv.querySelector('.product-select') }, 'invoice');
+    }
+
+    function addCreditNoteItem(product = null) {
+        const container = document.getElementById('nc-items-container');
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'nc-item grid grid-cols-12 gap-3 items-center';
+        
+        const productOptions = products.map(p => `<option value="${p.id}" ${product && p.id === product.id ? 'selected' : ''}>${p.name} (${p.code})</option>`).join('');
+
+        itemDiv.innerHTML = `
+            <div class="col-span-12 md:col-span-6"><select class="product-select w-full rounded-md border-gray-300 shadow-sm"><option value="">Seleccione un producto...</option>${productOptions}</select></div>
+            <div class="col-span-4 md:col-span-2"><input type="number" class="item-qty w-full rounded-md border-gray-300 shadow-sm" value="1" min="1"></div>
+            <div class="col-span-4 md:col-span-2"><input type="text" class="item-price w-full rounded-md border-gray-300 shadow-sm bg-gray-100" readonly></div>
+            <div class="col-span-3 md:col-span-1 text-right"><span class="item-total font-semibold"></span></div>
+            <div class="col-span-1 text-right"><button type="button" class="remove-item-btn text-red-500 hover:text-red-700"><i class="fas fa-trash"></i></button></div>
+        `;
+        container.appendChild(itemDiv);
+
+        itemDiv.querySelector('.product-select').addEventListener('change', (e) => updateItem(e, 'nc'));
+        itemDiv.querySelector('.item-qty').addEventListener('input', (e) => updateItem(e, 'nc'));
+        itemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+            itemDiv.remove();
+            updateCreditNoteTotals();
+        });
+        
+        if (product) updateItem({ target: itemDiv.querySelector('.product-select') }, 'nc');
+    }
+
+    function updateItem(event, type) {
+        const itemDiv = event.target.closest(`.${type === 'invoice' ? 'invoice' : 'nc'}-item`);
+        const productSelect = itemDiv.querySelector('.product-select');
+        const qtyInput = itemDiv.querySelector('.item-qty');
+        const priceInput = itemDiv.querySelector('.item-price');
+        const totalSpan = itemDiv.querySelector('.item-total');
+
+        const selectedProduct = products.find(p => p.id === parseInt(productSelect.value));
+        
+        if (selectedProduct) {
+            const price = selectedProduct.price;
+            const qty = parseInt(qtyInput.value) || 0;
+            priceInput.value = formatCurrency(price);
+            totalSpan.textContent = formatCurrency(price * qty);
+        } else {
+            priceInput.value = '';
+            totalSpan.textContent = '';
+        }
+
+        if (type === 'invoice') {
+            updateInvoiceTotals();
+        } else {
+            updateCreditNoteTotals();
+        }
+    }
+
+    function updateInvoiceTotals() {
+        let subtotal = 0;
+        document.querySelectorAll('.invoice-item').forEach(itemDiv => {
+            const productSelect = itemDiv.querySelector('.product-select');
+            const qtyInput = itemDiv.querySelector('.item-qty');
+            const selectedProduct = products.find(p => p.id === parseInt(productSelect.value));
+            if (selectedProduct) {
+                subtotal += selectedProduct.price * (parseInt(qtyInput.value) || 0);
+            }
+        });
+        const itbms = subtotal * 0.07;
+        const total = subtotal + itbms;
+
+        document.getElementById('invoice-subtotal').textContent = formatCurrency(subtotal);
+        document.getElementById('invoice-itbms').textContent = formatCurrency(itbms);
+        document.getElementById('invoice-total').textContent = formatCurrency(total);
+    }
+
+    function updateCreditNoteTotals() {
+        let subtotal = 0;
+        document.querySelectorAll('.nc-item').forEach(itemDiv => {
+            const productSelect = itemDiv.querySelector('.product-select');
+            const qtyInput = itemDiv.querySelector('.item-qty');
+            const selectedProduct = products.find(p => p.id === parseInt(productSelect.value));
+            if (selectedProduct) {
+                subtotal += selectedProduct.price * (parseInt(qtyInput.value) || 0);
+            }
+        });
+        const itbms = subtotal * 0.07;
+        const total = subtotal + itbms;
+
+        document.getElementById('nc-subtotal').textContent = formatCurrency(subtotal);
+        document.getElementById('nc-itbms').textContent = formatCurrency(itbms);
+        document.getElementById('nc-total').textContent = formatCurrency(total);
+    }
+
+    function handleInvoiceSubmit(e) {
+        e.preventDefault();
+        const { items, subtotal, formIsValid } = processFormItems('.invoice-item', 'invoice');
+
+        if (!formIsValid || items.length === 0) {
+            showToast('Por favor, complete todos los campos de la factura correctamente.', 'error');
+            return;
+        }
+
+        const itbms = subtotal * 0.07;
+        const total = subtotal + itbms;
+
+        const newDocument = {
+            id: fiscalSettings.invoice.nextId++,
+            date: new Date().toISOString(),
+            client: {
+                name: document.getElementById('client-name').value,
+                ruc: document.getElementById('client-ruc').value
+            },
+            items, subtotal, itbms, total,
+            sucursalId: currentUser.sucursalId
+        };
+
+        invoices.push(newDocument);
+        items.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            product.stock -= item.qty;
+        });
+        showToast(`Factura #${newDocument.id} creada.`);
+        
+        renderAll();
+        showPage('#dashboard');
+        openViewInvoiceModal(newDocument.id, 'invoice');
+    }
+
+    function handleCreditNoteSubmit(e) {
+        e.preventDefault();
+        const { items, subtotal, formIsValid } = processFormItems('.nc-item', 'nc');
+
+        if (!formIsValid || items.length === 0) {
+            showToast('Por favor, complete todos los campos de la nota de crédito.', 'error');
+            return;
+        }
+
+        const itbms = subtotal * 0.07;
+        const total = subtotal + itbms;
+
+        const newDocument = {
+            id: fiscalSettings.creditNote.nextId++,
+            date: new Date().toISOString(),
+            client: {
+                name: document.getElementById('nc-client-name').value,
+                ruc: document.getElementById('nc-client-ruc').value
+            },
+            originalInvoiceId: document.getElementById('nc-original-invoice-id').value,
+            items, subtotal, itbms, total,
+            sucursalId: currentUser.sucursalId
+        };
+
+        creditNotes.push(newDocument);
+        items.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            product.stock += item.qty;
+        });
+        showToast(`Nota de Crédito #${newDocument.id} creada.`);
+        
+        renderNotasCreditoPage();
+        toggleAddNCForm();
+        openViewInvoiceModal(newDocument.id, 'nota-credito');
+    }
+
+    function processFormItems(itemSelector, type) {
+        const items = [];
+        let subtotal = 0;
+        let formIsValid = true;
+
+        document.querySelectorAll(itemSelector).forEach(itemDiv => {
+            const productSelect = itemDiv.querySelector('.product-select');
+            const qtyInput = itemDiv.querySelector('.item-qty');
+            const productId = parseInt(productSelect.value);
+            const qty = parseInt(qtyInput.value);
+            const product = products.find(p => p.id === productId);
+
+            if (!product || !qty || qty <= 0) {
+                formIsValid = false; return;
+            }
+            if (type === 'invoice' && product.stock < qty) {
+                showToast(`Stock insuficiente para ${product.name}. Disponible: ${product.stock}`, 'error');
+                formIsValid = false; return;
+            }
+            items.push({ productId: product.id, name: product.name, qty, price: product.price });
+            subtotal += product.price * qty;
+        });
+        return { items, subtotal, formIsValid };
+    }
+    
+    function openViewInvoiceModal(docId, docType) {
+        const modal = document.getElementById('view-invoice-modal');
+        const doc = docType === 'invoice' 
+            ? invoices.find(d => d.id === docId)
+            : creditNotes.find(d => d.id === docId);
+        
+        if (!doc) {
+            showToast('Documento no encontrado.', 'error');
+            return;
+        }
+        
+        const isInvoice = docType === 'invoice';
+        const branch = sucursales.find(s => s.id === doc.sucursalId);
+        
+        modal.innerHTML = `
+            <div id="printable-invoice" class="p-8">
+                <div class="flex justify-between items-start border-b pb-4">
+                    <div>
+                        <p class="font-bold text-gray-500">${mainSoftwareProfile.name}</p>
+                        <h2 class="text-3xl font-bold text-blue-900">${clientCompanyProfile.name}</h2>
+                        <p>${clientCompanyProfile.ruc}</p>
+                        <p>${clientCompanyProfile.address}</p>
+                        <p class="font-semibold">Sucursal: ${branch ? branch.name : 'N/A'}</p>
+                    </div>
+                    <div class="text-right">
+                        <h3 class="text-2xl font-bold uppercase">${isInvoice ? 'Factura' : 'Nota de Crédito'}</h3>
+                        <p class="text-red-600 font-semibold">#${doc.id}</p>
+                        <p>Fecha: ${new Date(doc.date).toLocaleDateString()}</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mt-6">
+                    <div>
+                        <h4 class="font-bold text-gray-600 mb-1">CLIENTE:</h4>
+                        <p>${doc.client.name}</p>
+                        <p>${doc.client.ruc}</p>
+                    </div>
+                    ${!isInvoice ? `<div><h4 class="font-bold text-gray-600 mb-1">FACTURA AFECTADA:</h4><p>#${doc.originalInvoiceId}</p></div>` : ''}
+                </div>
+                <div class="mt-8">
+                    <table class="w-full text-left">
+                        <thead><tr class="bg-gray-100 text-sm text-gray-600"><th class="p-3">Descripción</th><th class="p-3 text-center">Cant.</th><th class="p-3 text-right">Precio Unit.</th><th class="p-3 text-right">Total</th></tr></thead>
+                        <tbody>
+                            ${doc.items.map(item => `
+                                <tr class="border-b"><td class="p-3">${item.name}</td><td class="p-3 text-center">${item.qty}</td><td class="p-3 text-right">${formatCurrency(item.price)}</td><td class="p-3 text-right">${formatCurrency(item.price * item.qty)}</td></tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <div class="w-full md:w-1/2 lg:w-1/3 space-y-2">
+                        <div class="flex justify-between"><span class="font-medium text-gray-600">Subtotal:</span><span>${formatCurrency(doc.subtotal)}</span></div>
+                        <div class="flex justify-between"><span class="font-medium text-gray-600">ITBMS (7%):</span><span>${formatCurrency(doc.itbms)}</span></div>
+                        <div class="flex justify-between text-xl font-bold text-gray-800 border-t pt-2 mt-2"><span>Total:</span><span>${formatCurrency(doc.total)}</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 bg-gray-50 flex justify-end gap-3 no-print">
+                <button id="close-invoice-modal-btn" class="bg-gray-300 px-4 py-2 rounded-lg">Cerrar</button>
+                <button id="print-invoice-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg"><i class="fas fa-print mr-2"></i>Imprimir</button>
+            </div>
+        `;
+        openModal(modal);
+        document.getElementById('close-invoice-modal-btn').addEventListener('click', () => closeModal(modal));
+        document.getElementById('print-invoice-btn').addEventListener('click', () => window.print());
+    }
+
+    // --- NOTAS DE CREDITO PAGE LOGIC ---
+    function renderNotasCreditoPage() {
+        document.getElementById('add-nc-form-container').classList.add('hidden');
+        document.getElementById('show-add-nc-form-btn').innerHTML = '<i class="fas fa-plus mr-2"></i>Agregar Nota de Crédito';
+        applyNCFiltersAndRender();
+    }
+
+    function toggleAddNCForm() {
+        const formContainer = document.getElementById('add-nc-form-container');
+        const btn = document.getElementById('show-add-nc-form-btn');
+        const isHidden = formContainer.classList.contains('hidden');
+
+        if (isHidden) {
+            setupNewNCForm();
+            formContainer.classList.remove('hidden');
+            btn.innerHTML = '<i class="fas fa-times mr-2"></i>Cancelar';
+        } else {
+            formContainer.classList.add('hidden');
+            btn.innerHTML = '<i class="fas fa-plus mr-2"></i>Agregar Nota de Crédito';
+        }
+    }
+
+    function setupNewNCForm() {
+        const { rangeStart, rangeEnd, nextId } = fiscalSettings.creditNote;
+        document.getElementById('nc-fiscal-range-info').textContent = `Nota de Crédito #${nextId} (Rango: ${rangeStart}-${rangeEnd})`;
+        
+        const creditNoteForm = document.getElementById('credit-note-form');
+        creditNoteForm.reset();
+        document.getElementById('nc-items-container').innerHTML = '';
+        addCreditNoteItem();
+        updateCreditNoteTotals();
+    }
+
+    function applyNCFiltersAndRender() {
+        const branchFilter = document.getElementById('nc-filter-branch').value;
+        const dateFilter = document.getElementById('nc-filter-date').value;
+        const clientFilter = document.getElementById('nc-filter-client').value.toLowerCase();
+        const invoiceFilter = document.getElementById('nc-filter-invoice').value;
+
+        let filteredData = creditNotes;
+
+        if (branchFilter !== 'all') {
+            filteredData = filteredData.filter(nc => nc.sucursalId === parseInt(branchFilter));
+        }
+        if (dateFilter) {
+            filteredData = filteredData.filter(nc => new Date(nc.date).toISOString().split('T')[0] === dateFilter);
+        }
+        if (clientFilter) {
+            filteredData = filteredData.filter(nc => nc.client.name.toLowerCase().includes(clientFilter) || nc.client.ruc.toLowerCase().includes(clientFilter));
+        }
+        if (invoiceFilter) {
+            filteredData = filteredData.filter(nc => nc.originalInvoiceId.toString().includes(invoiceFilter));
+        }
+
+        renderCreditNotesList(filteredData);
+    }
+
+    function renderCreditNotesList(data) {
+        const container = document.getElementById('credit-notes-list-container');
+        if (data.length === 0) {
+            container.innerHTML = '<p class="text-center p-8 text-gray-500">No se encontraron notas de crédito con los filtros aplicados.</p>';
+            return;
+        }
+
+        container.innerHTML = `
+            <table class="w-full text-left responsive-table">
+                <thead>
+                    <tr class="text-sm text-gray-500 border-b">
+                        <th class="p-3"># N.C.</th>
+                        <th class="p-3">Fecha</th>
+                        <th class="p-3">Cliente</th>
+                        <th class="p-3">Factura Afectada</th>
+                        <th class="p-3">Sucursal</th>
+                        <th class="p-3 text-right">Monto</th>
+                        <th class="p-3 text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(nc => {
+                        const branch = sucursales.find(s => s.id === nc.sucursalId);
+                        return `
+                        <tr class="border-b hover:bg-gray-50">
+                            <td data-label="# N.C." class="p-3 font-medium text-blue-600">${nc.id}</td>
+                            <td data-label="Fecha" class="p-3">${new Date(nc.date).toLocaleDateString()}</td>
+                            <td data-label="Cliente" class="p-3">${nc.client.name}</td>
+                            <td data-label="Fact. Afectada" class="p-3 text-center">#${nc.originalInvoiceId}</td>
+                            <td data-label="Sucursal" class="p-3">${branch ? branch.name : 'N/A'}</td>
+                            <td data-label="Monto" class="p-3 text-right font-semibold">${formatCurrency(nc.total)}</td>
+                            <td data-label="Acciones" class="p-3 text-center">
+                                <button class="view-invoice-btn text-blue-600 hover:underline" data-doc-id="${nc.id}" data-doc-type="nota-credito">Ver</button>
+                            </td>
+                        </tr>
+                    `}).join('')}
+                </tbody>
+            </table>
+        `;
+
+        document.querySelectorAll('.view-invoice-btn').forEach(btn => btn.addEventListener('click', (e) => {
+            const { docId, docType } = e.target.dataset;
+            openViewInvoiceModal(parseInt(docId), docType);
+        }));
+    }
+
+
+    // --- REPORTS LOGIC ---
+    function generateItbmsReport() {
+        const branchFilterId = document.getElementById('report-branch-filter').value;
+        const month = parseInt(document.getElementById('report-month').value);
+        const year = parseInt(document.getElementById('report-year').value);
+        const filterByBranch = branchFilterId !== 'all';
+
+        const sales = invoices.filter(inv => {
+            const invDate = new Date(inv.date);
+            const branchMatch = !filterByBranch || inv.sucursalId === parseInt(branchFilterId);
+            return branchMatch && invDate.getMonth() === month && invDate.getFullYear() === year;
+        });
+        
+        const creditNotesForPeriod = creditNotes.filter(cn => {
+            const cnDate = new Date(cn.date);
+            const branchMatch = !filterByBranch || cn.sucursalId === parseInt(branchFilterId);
+            return branchMatch && cnDate.getMonth() === month && cnDate.getFullYear() === year;
+        });
+
+        const ventasGravadas = sales.reduce((sum, inv) => sum + inv.subtotal, 0);
+        const devoluciones = creditNotesForPeriod.reduce((sum, cn) => sum + cn.subtotal, 0);
+        const ventasNetas = ventasGravadas - devoluciones;
+
+        const itbmsCobrado = ventasNetas * 0.07;
+        const itbmsCredito = 0; // Placeholder for purchases ITBMS
+        const itbmsTotal = itbmsCobrado - itbmsCredito;
+
+        document.getElementById('report-ventas-gravadas').textContent = formatCurrency(ventasNetas);
+        document.getElementById('report-itbms-cobrado').textContent = formatCurrency(itbmsCobrado);
+        document.getElementById('report-itbms-credito').textContent = formatCurrency(itbmsCredito);
+        document.getElementById('report-itbms-total').textContent = formatCurrency(itbmsTotal > 0 ? itbmsTotal : 0);
+        
+        document.getElementById('itbms-report-content').classList.remove('hidden');
+    }
+
+    // --- BRANCH FILTERING ---
+    function populateBranchFilters() {
+        const filterSelects = [
+            document.getElementById('dashboard-branch-filter'),
+            document.getElementById('nc-filter-branch'),
+            document.getElementById('report-branch-filter')
+        ];
+
+        filterSelects.forEach(select => {
+            if (select) {
+                select.innerHTML = '<option value="all">Todas las Sucursales</option>';
+                sucursales.forEach(s => {
+                    select.innerHTML += `<option value="${s.id}">${s.name}</option>`;
+                });
+                // Vendedores only see their own branch
+                if (currentUser.role === 'vendedor') {
+                    select.value = currentUser.sucursalId;
+                    select.disabled = true;
+                }
+            }
+        });
+    }
+});
+</script>
+
+</body>
+</html>
+
+
+
